@@ -9,6 +9,7 @@ type Config struct {
 	Addr     string
 	BaseURL  string
 	LogLevel string
+	DSN      string
 }
 
 func New() *Config {
@@ -16,6 +17,7 @@ func New() *Config {
 	flag.StringVar(&cfg.Addr, "a", "localhost:8080", "address to run server")
 	flag.StringVar(&cfg.BaseURL, "b", "localhost:8080", "base URL for short links")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
+	flag.StringVar(&cfg.DSN, "d", "", "database DSN (postgres://user:pass@host:port/dbname)")
 	flag.Parse()
 
 	if envAddr := os.Getenv("SERVER_ADDRESS"); envAddr != "" {
@@ -26,6 +28,9 @@ func New() *Config {
 	}
 	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
 		cfg.LogLevel = envLogLevel
+	}
+	if envDSN := os.Getenv("DATABASE_DSN"); envDSN != "" {
+		cfg.DSN = envDSN
 	}
 
 	return &cfg
