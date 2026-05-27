@@ -18,7 +18,12 @@ func main() {
 		panic(err)
 	}
 
-	store := storage.New()
+	store, err := storage.New(cfg.DSN)
+	if err != nil {
+		logger.Log.Fatal("Failed to connect to Database", zap.Error(err))
+	}
+	defer store.Close()
+
 	h := handlers.New(store, cfg.BaseURL)
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))

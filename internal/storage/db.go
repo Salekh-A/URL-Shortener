@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -40,4 +42,44 @@ func createTable(db *sql.DB) error {
     `
 	_, err := db.Exec(query)
 	return err
+}
+
+func (s *Storage) Save(url string) (string, error) {
+	shortID := generateShortID()
+	query := `INSERT INTO urls (short_id, original_url) VALUES ($1, $2)`
+
+	_, err := s.db.Exec(query, shortID, url)
+	if err != nil {
+		return "", err
+	}
+
+	return shortID, nil
+}
+
+func (s *Storage) Load(shortID string) (string, bool) {
+	var originalURL string
+	query := `SELECT original_url FROM urls WHERE short_id = $1`
+
+	err := s.db.QueryRow(query, shortID).Scan(&originalURL)
+	if err != nil {
+		return "", false
+	}
+	return originalURL, true
+}
+
+func (s *Storage) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
+func (s *Storage) Close() error {
+	return s.db.Close()
+}
+
+func generateShortID() string {
+	b := make([]byte, 4)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
 }
