@@ -35,16 +35,22 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
 		longURL := string(body)
-		id := h.storage.Save(longURL)
+		id, err := h.storage.Save(longURL)
+		if err != nil {
+			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+		}
 
 		shortURL := h.baseURL + "/" + id
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(shortURL))
-
 		return
 	}
 	if r.Method == http.MethodGet {
 		id := r.URL.Path[1:]
+		if id == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
 		if longURL, ok := h.storage.Load(id); ok {
 			w.Header().Set("Location", longURL)
@@ -52,7 +58,7 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("porno"))
+		w.Write([]byte("Not found"))
 		return
 
 	}
