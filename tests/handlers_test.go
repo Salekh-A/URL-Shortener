@@ -9,7 +9,14 @@ import (
 )
 
 func TestRootHandlerPost(t *testing.T) {
-	store := storage.New()
+	dsn := "postgres://postgres:postgres@localhost:5432/urlshortener_test?sslmode=disable"
+	store, err := storage.New(dsn)
+	if err != nil {
+		t.Skipf("PostgreSQL not available: %v", err)
+	}
+	defer store.Close()
+
+	store.Clear()
 	h := handlers.New(store, "http://localhost:8080")
 
 	req := httptest.NewRequest("POST", "/", strings.NewReader("https://google.com"))
@@ -21,7 +28,13 @@ func TestRootHandlerPost(t *testing.T) {
 }
 
 func TestRootHandlerEmptyPost(t *testing.T) {
-	store := storage.New()
+	dsn := "postgres://postgres:postgres@localhost:5432/urlshortener_test?sslmode=disable"
+	store, err := storage.New(dsn)
+	if err != nil {
+		t.Skipf("PostgreSQL not available: %v", err)
+	}
+	defer store.Close()
+
 	h := handlers.New(store, "http://localhost:8080")
 
 	req := httptest.NewRequest("POST", "/", strings.NewReader(""))
@@ -33,14 +46,23 @@ func TestRootHandlerEmptyPost(t *testing.T) {
 }
 
 func TestRootHandlerGet(t *testing.T) {
-	store := storage.New()
+	dsn := "postgres://postgres:postgres@localhost:5432/urlshortener_test?sslmode=disable"
+	store, err := storage.New(dsn)
+	if err != nil {
+		t.Skipf("PostgreSQL not available: %v", err)
+	}
+	defer store.Close()
+
 	h := handlers.New(store, "http://localhost:8080")
 
 	postReq := httptest.NewRequest("POST", "/", strings.NewReader("https://google.com"))
 	postRr := httptest.NewRecorder()
 	h.Root(postRr, postReq)
 
-	getReq := httptest.NewRequest("GET", "/0", nil)
+	shortURL := postRr.Body.String()
+	id := shortURL[strings.LastIndex(shortURL, "/")+1:]
+
+	getReq := httptest.NewRequest("GET", "/"+id, nil)
 	getRr := httptest.NewRecorder()
 	h.Root(getRr, getReq)
 
@@ -50,7 +72,13 @@ func TestRootHandlerGet(t *testing.T) {
 }
 
 func TestRootHandlerGetEmpty(t *testing.T) {
-	store := storage.New()
+	dsn := "postgres://postgres:postgres@localhost:5432/urlshortener_test?sslmode=disable"
+	store, err := storage.New(dsn)
+	if err != nil {
+		t.Skipf("PostgreSQL not available: %v", err)
+	}
+	defer store.Close()
+
 	h := handlers.New(store, "http://localhost:8080")
 
 	getReq := httptest.NewRequest("GET", "/", nil)

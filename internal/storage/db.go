@@ -75,6 +75,11 @@ func (s *Storage) Close() error {
 	return s.db.Close()
 }
 
+func (s *Storage) Clear() error {
+	_, err := s.db.Exec("TRUNCATE TABLE urls")
+	return err
+}
+
 func generateShortID() string {
 	b := make([]byte, 4)
 	_, err := rand.Read(b)
