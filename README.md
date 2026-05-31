@@ -46,3 +46,9 @@ go run cmd/main.go -d "postgres://postgres:postgres@localhost:5432/urlshortener?
 ```bash
 go test ./tests/...
 ```
+## Команды Makefile
+
+```bash
+make run    # запустить сервер
+make build  # собрать бинарник
+make test   # запустить тесты
