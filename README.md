@@ -46,6 +46,23 @@ go run cmd/main.go -d "postgres://postgres:postgres@localhost:5432/urlshortener?
 ```bash
 go test ./tests/...
 ```
+
+## Примеры
+
+```bash
+# POST запрос (создать короткую ссылку)
+curl -X POST -d "https://example.com" http://localhost:8080
+# Ответ: http://localhost:8080/a1b2c3d4
+
+# GET запрос (перейти по ссылке)
+curl -v http://localhost:8080/a1b2c3d4
+# Редирект 307 на https://example.com
+
+# Health check
+curl http://localhost:8080/ping
+# OK
+```
+
 ## Команды Makefile
 
 ```bash
