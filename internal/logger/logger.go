@@ -9,6 +9,16 @@ import (
 
 var Log *zap.Logger = zap.NewNop()
 
+type responseData struct {
+	status int
+	size   int
+}
+
+type responseWriterWrapper struct {
+	http.ResponseWriter
+	responseData *responseData
+}
+
 func Initialize(level string) error {
 	lvl, err := zap.ParseAtomicLevel(level)
 	if err != nil {
@@ -28,21 +38,12 @@ func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		type responseData struct {
-			status int
-			size   int
-		}
-
 		rw := &responseWriterWrapper{
 			ResponseWriter: w,
-			responseData: (*struct {
-				status int
-				size   int
-			})(&responseData{status: 200}),
+			responseData:   &responseData{status: 200},
 		}
 
 		next.ServeHTTP(rw, r)
-
 		duration := time.Since(start)
 
 		Log.Info("HTTP request",
@@ -53,14 +54,6 @@ func RequestLogger(next http.Handler) http.Handler {
 			zap.Int("size", rw.responseData.size),
 		)
 	})
-}
-
-type responseWriterWrapper struct {
-	http.ResponseWriter
-	responseData *struct {
-		status int
-		size   int
-	}
 }
 
 func (rw *responseWriterWrapper) Write(b []byte) (int, error) {
