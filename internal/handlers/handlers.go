@@ -27,12 +27,12 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		defer r.Body.Close()
+
 		if string(body) == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-
-		defer r.Body.Close()
 
 		longURL := string(body)
 		id, err := h.storage.Save(longURL)
@@ -45,6 +45,7 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(shortURL))
 		return
 	}
+
 	if r.Method == http.MethodGet {
 		id := r.URL.Path[1:]
 		if id == "" {
@@ -60,7 +61,6 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Not found"))
 		return
-
 	}
 
 }
