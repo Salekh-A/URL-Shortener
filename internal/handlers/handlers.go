@@ -26,7 +26,6 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-
 		defer r.Body.Close()
 
 		if string(body) == "" {
@@ -38,6 +37,7 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 		id, err := h.storage.Save(longURL)
 		if err != nil {
 			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+			return
 		}
 
 		shortURL := h.baseURL + "/" + id
@@ -58,9 +58,10 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusTemporaryRedirect)
 			return
 		}
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Not found"))
 		return
 	}
-
+	w.WriteHeader(http.StatusMethodNotAllowed)
+	w.Write([]byte("Method not allowed"))
 }
