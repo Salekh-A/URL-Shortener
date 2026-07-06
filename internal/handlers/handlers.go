@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"io"
+	"encoding/json"
 	"net/http"
 	storage "newproject/internal/storage"
 )
@@ -9,6 +9,14 @@ import (
 type Handler struct {
 	storage *storage.Storage
 	baseURL string
+}
+
+type ShortRequest struct {
+	URL string `json:"url"`
+}
+
+type ShortResponse struct {
+	ShortUrl string `json:"short_url"`
 }
 
 func New(store *storage.Storage, baseURL string) *Handler {
@@ -20,7 +28,8 @@ func New(store *storage.Storage, baseURL string) *Handler {
 func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
-		body, err := io.ReadAll(r.Body)
+		var req ShortRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
 
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -28,21 +37,24 @@ func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
 		}
 		defer r.Body.Close()
 
-		if string(body) == "" {
+		if req.URL == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		longURL := string(body)
+		longURL := req.URL
 		id, err := h.storage.Save(longURL)
 		if err != nil {
 			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 			return
 		}
 
-		shortURL := h.baseURL + "/" + id
+		shortURL := ShortResponse{
+			ShortUrl: h.baseURL + "/" + id,
+		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(shortURL))
+		json.NewEncoder(w).Encode(shortURL)
 		return
 	}
 
