@@ -26,13 +26,13 @@ func New(dsn string) (*Storage, error) {
 	if err := db.PingContext(context.Background()); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
-	if err := createTable(db); err != nil {
+	if err := createTable(context.Background(), db); err != nil {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
 	return &Storage{db: db}, nil
 }
 
-func createTable(db *sql.DB) error {
+func createTable(ctx context.Context, db *sql.DB) error {
 	query := `
         CREATE TABLE IF NOT EXISTS urls (
             id SERIAL PRIMARY KEY,
@@ -40,15 +40,15 @@ func createTable(db *sql.DB) error {
             original_url TEXT NOT NULL
         )
     `
-	_, err := db.Exec(query)
+	_, err := db.ExecContext(ctx, query)
 	return err
 }
 
-func (s *Storage) Save(url string) (string, error) {
+func (s *Storage) Save(ctx context.Context, url string) (string, error) {
 	shortID := generateShortID()
 	query := `INSERT INTO urls (short_id, original_url) VALUES ($1, $2)`
 
-	_, err := s.db.Exec(query, shortID, url)
+	_, err := s.db.ExecContext(ctx, query, shortID, url)
 	if err != nil {
 		return "", err
 	}
@@ -56,15 +56,15 @@ func (s *Storage) Save(url string) (string, error) {
 	return shortID, nil
 }
 
-func (s *Storage) Load(shortID string) (string, bool) {
+func (s *Storage) Load(ctx context.Context, shortID string) (string, error) {
 	var originalURL string
 	query := `SELECT original_url FROM urls WHERE short_id = $1`
 
-	err := s.db.QueryRow(query, shortID).Scan(&originalURL)
+	err := s.db.QueryRowContext(ctx, query, shortID).Scan(&originalURL)
 	if err != nil {
-		return "", false
+		return "", err
 	}
-	return originalURL, true
+	return originalURL, err
 }
 
 func (s *Storage) Ping(ctx context.Context) error {
@@ -75,8 +75,8 @@ func (s *Storage) Close() error {
 	return s.db.Close()
 }
 
-func (s *Storage) Clear() error {
-	_, err := s.db.Exec("TRUNCATE TABLE urls")
+func (s *Storage) Clear(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "TRUNCATE TABLE urls")
 	return err
 }
 

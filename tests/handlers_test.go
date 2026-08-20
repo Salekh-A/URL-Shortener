@@ -16,12 +16,11 @@ func TestRootHandlerPost(t *testing.T) {
 	}
 	defer store.Close()
 
-	store.Clear()
 	h := handlers.New(store, "http://localhost:8080")
 
 	req := httptest.NewRequest("POST", "/", strings.NewReader("https://google.com"))
 	rr := httptest.NewRecorder()
-	h.Root(rr, req)
+	h.HandleTextShorten(rr, req)
 	if rr.Code != 201 {
 		t.Errorf("expected 201, got %d", rr.Code)
 	}
@@ -39,7 +38,7 @@ func TestRootHandlerEmptyPost(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/", strings.NewReader(""))
 	rr := httptest.NewRecorder()
-	h.Root(rr, req)
+	h.HandleTextShorten(rr, req)
 	if rr.Code != 400 {
 		t.Errorf("expected 400, got %d", rr.Code)
 	}
@@ -57,14 +56,14 @@ func TestRootHandlerGet(t *testing.T) {
 
 	postReq := httptest.NewRequest("POST", "/", strings.NewReader("https://google.com"))
 	postRr := httptest.NewRecorder()
-	h.Root(postRr, postReq)
+	h.HandleTextShorten(postRr, postReq)
 
 	shortURL := postRr.Body.String()
 	id := shortURL[strings.LastIndex(shortURL, "/")+1:]
 
 	getReq := httptest.NewRequest("GET", "/"+id, nil)
 	getRr := httptest.NewRecorder()
-	h.Root(getRr, getReq)
+	h.HandleGet(getRr, getReq)
 
 	if getRr.Code != 307 {
 		t.Errorf("expected 307, got %d", getRr.Code)
@@ -83,7 +82,7 @@ func TestRootHandlerGetEmpty(t *testing.T) {
 
 	getReq := httptest.NewRequest("GET", "/", nil)
 	getRr := httptest.NewRecorder()
-	h.Root(getRr, getReq)
+	h.HandleGet(getRr, getReq)
 
 	if getRr.Code != 400 {
 		t.Errorf("expected 400, got %d", getRr.Code)

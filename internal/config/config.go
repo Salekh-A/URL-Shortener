@@ -32,6 +32,5 @@ func New() *Config {
 	if envDSN := os.Getenv("DATABASE_DSN"); envDSN != "" {
 		cfg.DSN = envDSN
 	}
-
 	return &cfg
 }

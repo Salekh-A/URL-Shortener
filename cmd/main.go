@@ -29,8 +29,9 @@ func main() {
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", h.Root)
-
+	mux.HandleFunc("GET /{id}", h.HandleGet)
+	mux.HandleFunc("POST /api/shorten", h.HandleAPIShorten)
+	mux.HandleFunc("POST /", h.HandleTextShorten)
 	if err := http.ListenAndServe(cfg.Addr, logger.RequestLogger(mux)); err != nil {
 		logger.Log.Fatal("Server failed", zap.Error(err))
 	}

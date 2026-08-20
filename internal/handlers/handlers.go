@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	storage "newproject/internal/storage"
+	"strings"
 )
 
 type Handler struct {
@@ -11,12 +13,12 @@ type Handler struct {
 	baseURL string
 }
 
-type ShortRequest struct {
-	URL string `json:"url"`
+type ShortenResponse struct {
+	ShortURL string `json:"result"`
 }
 
-type ShortResponse struct {
-	ShortUrl string `json:"short_url"`
+type ShortenRequest struct {
+	URL string `json:"url"`
 }
 
 func New(store *storage.Storage, baseURL string) *Handler {
@@ -25,55 +27,88 @@ func New(store *storage.Storage, baseURL string) *Handler {
 		baseURL: baseURL,
 	}
 }
-func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleAPIShorten(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req ShortenRequest
+	defer r.Body.Close()
+	err := json.NewDecoder(r.Body).Decode(&req)
 
-	if r.Method == http.MethodPost {
-		var req ShortRequest
-		err := json.NewDecoder(r.Body).Decode(&req)
-
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
-
-		if req.URL == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		longURL := req.URL
-		id, err := h.storage.Save(longURL)
-		if err != nil {
-			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
-			return
-		}
-
-		shortURL := ShortResponse{
-			ShortUrl: h.baseURL + "/" + id,
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(shortURL)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	if r.Method == http.MethodGet {
-		id := r.URL.Path[1:]
-		if id == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if longURL, ok := h.storage.Load(id); ok {
-			w.Header().Set("Location", longURL)
-			w.WriteHeader(http.StatusTemporaryRedirect)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Not found"))
+	if req.URL == "" {
+		http.Error(w, "Empty URL", http.StatusBadRequest)
 		return
 	}
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	w.Write([]byte("Method not allowed"))
+
+	if !strings.HasPrefix(req.URL, "http://") && !strings.HasPrefix(req.URL, "https://") {
+		http.Error(w, "Invalid URL", http.StatusBadRequest)
+		return
+	}
+
+	id, err := h.storage.Save(ctx, req.URL)
+	if err != nil {
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+		return
+	}
+
+	resp := ShortenResponse{
+		ShortURL: h.baseURL + "/" + id,
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(data)
+}
+
+func (h *Handler) HandleTextShorten(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	defer r.Body.Close()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	if string(body) == "" {
+		http.Error(w, "Empty request", http.StatusBadRequest)
+		return
+	}
+
+	id, err := h.storage.Save(ctx, string(body))
+	if err != nil {
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+		return
+	}
+
+	shortURL := h.baseURL + "/" + id
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(shortURL))
+}
+
+func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "Empty id", http.StatusBadRequest)
+		return
+	}
+
+	longURL, err := h.storage.Load(ctx, id)
+	if err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Location", longURL)
+	w.WriteHeader(http.StatusTemporaryRedirect)
 }
