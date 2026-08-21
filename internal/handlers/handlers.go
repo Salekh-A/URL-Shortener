@@ -21,6 +21,16 @@ type ShortenRequest struct {
 	URL string `json:"url"`
 }
 
+type BatchRequest struct {
+	CorrelationId string `json:"correlation_id"`
+	OriginalURL   string `json:"original_url"`
+}
+
+type BatchResponse struct {
+	CorrelationId string `json:"correlation_id"`
+	ShortURL      string `json:"short_url"`
+}
+
 func New(store *storage.Storage, baseURL string) *Handler {
 	return &Handler{
 		storage: store,
@@ -31,9 +41,8 @@ func (h *Handler) HandleAPIShorten(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req ShortenRequest
 	defer r.Body.Close()
-	err := json.NewDecoder(r.Body).Decode(&req)
 
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -111,4 +120,48 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Location", longURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+}
+
+func (h *Handler) BatchShorten(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	ctx := r.Context()
+	var reqs []BatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if len(reqs) == 0 {
+		http.Error(w, "Empty body", http.StatusBadRequest)
+		return
+	}
+
+	resp := make([]BatchResponse, 0, len(reqs))
+	for _, req := range reqs {
+		if req.OriginalURL == "" || !strings.HasPrefix(req.OriginalURL, "http://") && !strings.HasPrefix(req.OriginalURL, "https://") {
+			http.Error(w, "Invalid URL in request", http.StatusBadRequest)
+			return
+		}
+
+		id, err := h.storage.Save(ctx, req.OriginalURL) // поменять на транзакцию
+		if err != nil {
+			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+			return
+		}
+
+		resp = append(resp, BatchResponse{
+			CorrelationId: req.CorrelationId,
+			ShortURL:      h.baseURL + "/" + id,
+		})
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(data)
 }
