@@ -32,6 +32,7 @@ func main() {
 	mux.HandleFunc("GET /{id}", h.HandleGet)
 	mux.HandleFunc("POST /api/shorten", h.HandleAPIShorten)
 	mux.HandleFunc("POST /", h.HandleTextShorten)
+	mux.HandleFunc("POST /api/shorten/batch", h.BatchShorten)
 	if err := http.ListenAndServe(cfg.Addr, logger.RequestLogger(mux)); err != nil {
 		logger.Log.Fatal("Server failed", zap.Error(err))
 	}
