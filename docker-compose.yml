@@ -1,19 +1,26 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: urlshortener
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
 
   app:
     build: .
@@ -22,11 +29,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
-      DATABASE_DSN: "postgres://postgres:postgres@postgres:5432/urlshortener?sslmode=disable"
-      SERVER_ADDRESS: ":8080"
-      BASE_URL: "http://localhost:8080"
-      LOG_LEVEL: "info"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      SERVER_ADDRESS: :8080
+      BASE_URL: ${BASE_URL}
+      LOG_LEVEL: ${LOG_LEVEL}
 
 volumes:
   postgres_data:
+  redis_data:

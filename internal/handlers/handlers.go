@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	storage "newproject/internal/storage"
-	"strings"
+	"net/url"
+
+	"newproject/internal/ports"
 )
 
 type Handler struct {
-	storage *storage.Storage
+	service ports.Service
 	baseURL string
 }
 
@@ -22,23 +23,38 @@ type ShortenRequest struct {
 }
 
 type BatchRequest struct {
-	CorrelationId string `json:"correlation_id"`
+	CorrelationID string `json:"correlation_id"`
 	OriginalURL   string `json:"original_url"`
 }
 
 type BatchResponse struct {
-	CorrelationId string `json:"correlation_id"`
+	CorrelationID string `json:"correlation_id"`
 	ShortURL      string `json:"short_url"`
 }
 
-func New(store *storage.Storage, baseURL string) *Handler {
+func New(service ports.Service, baseURL string) *Handler {
 	return &Handler{
-		storage: store,
+		service: service,
 		baseURL: baseURL,
 	}
 }
+
+func isValidURL(rawURL string) bool {
+	parsedURL, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return false
+	}
+
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return false
+	}
+
+	return parsedURL.Host != ""
+}
+
 func (h *Handler) HandleAPIShorten(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	var req ShortenRequest
 	defer r.Body.Close()
 
@@ -47,17 +63,12 @@ func (h *Handler) HandleAPIShorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.URL == "" {
-		http.Error(w, "Empty URL", http.StatusBadRequest)
-		return
-	}
-
-	if !strings.HasPrefix(req.URL, "http://") && !strings.HasPrefix(req.URL, "https://") {
+	if !isValidURL(req.URL) {
 		http.Error(w, "Invalid URL", http.StatusBadRequest)
 		return
 	}
 
-	id, err := h.storage.Save(ctx, req.URL)
+	id, err := h.service.Create(ctx, req.URL)
 	if err != nil {
 		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
@@ -67,40 +78,41 @@ func (h *Handler) HandleAPIShorten(w http.ResponseWriter, r *http.Request) {
 		ShortURL: h.baseURL + "/" + id,
 	}
 
-	data, err := json.Marshal(resp)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write(data)
+
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *Handler) HandleTextShorten(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer r.Body.Close()
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read body", http.StatusBadRequest)
 		return
 	}
 
-	if string(body) == "" {
-		http.Error(w, "Empty request", http.StatusBadRequest)
+	rawURL := string(body)
+
+	if !isValidURL(rawURL) {
+		http.Error(w, "Invalid URL", http.StatusBadRequest)
 		return
 	}
 
-	id, err := h.storage.Save(ctx, string(body))
+	id, err := h.service.Create(ctx, rawURL)
 	if err != nil {
 		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
 	}
 
 	shortURL := h.baseURL + "/" + id
+
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(shortURL))
+
+	_, _ = w.Write([]byte(shortURL))
 }
 
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +124,7 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	longURL, err := h.storage.Load(ctx, id)
+	longURL, err := h.service.Get(ctx, id)
 	if err != nil {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -126,7 +138,9 @@ func (h *Handler) BatchShorten(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	ctx := r.Context()
+
 	var reqs []BatchRequest
+
 	if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -137,31 +151,34 @@ func (h *Handler) BatchShorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make([]BatchResponse, 0, len(reqs))
+	urls := make([]string, 0, len(reqs))
+
 	for _, req := range reqs {
-		if req.OriginalURL == "" || !strings.HasPrefix(req.OriginalURL, "http://") && !strings.HasPrefix(req.OriginalURL, "https://") {
+		if !isValidURL(req.OriginalURL) {
 			http.Error(w, "Invalid URL in request", http.StatusBadRequest)
 			return
 		}
 
-		id, err := h.storage.Save(ctx, req.OriginalURL) // поменять на транзакцию
-		if err != nil {
-			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
-			return
-		}
+		urls = append(urls, req.OriginalURL)
+	}
 
+	ids, err := h.service.CreateBatch(ctx, urls)
+	if err != nil {
+		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+		return
+	}
+
+	resp := make([]BatchResponse, 0, len(reqs))
+
+	for i, req := range reqs {
 		resp = append(resp, BatchResponse{
-			CorrelationId: req.CorrelationId,
-			ShortURL:      h.baseURL + "/" + id,
+			CorrelationID: req.CorrelationID,
+			ShortURL:      h.baseURL + "/" + ids[i],
 		})
 	}
 
-	data, err := json.Marshal(resp)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write(data)
+
+	_ = json.NewEncoder(w).Encode(resp)
 }

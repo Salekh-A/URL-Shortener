@@ -1,71 +1,76 @@
 # URL Shortener
 
-Сервис сокращения ссылок на Go.
+## Описание
 
-## Запуск
+Классический сервис для сокращения ссылок, написанный на Golang. Используется PostgreSQL в качестве основной персистентной базы данных и Redis в качестве кэша для уменьшения latency и нагрузки на PostgreSQL.
 
-### Docker Compose
-
-```bash
-docker-compose up --build
-```
-
-### Локально
-
-**PostgreSQL:**
-
-```bash
-docker run -d --name postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=urlshortener -p 5432:5432 postgres:15
-```
-
-**Сервис:**
-
-```bash
-go run cmd/main.go -d "postgres://postgres:postgres@localhost:5432/urlshortener?sslmode=disable"
-```
+Сервис позволяет создавать короткие URL, получать оригинальный URL по короткому идентификатору, а также создавать несколько коротких ссылок за один запрос.
 
 ## API
 
-| Метод | Путь       | Описание                |
-|-------|------------|-------------------------|
-| POST  | `/`        | Создать короткую ссылку |
-| GET   | `/{id}`    | Редирект                |
-| GET   | `/ping`    | Health check            |
+```text
+POST http://localhost:8080/api/shorten
+# Создаёт короткий URL
 
-## Конфигурация
+POST http://localhost:8080/
+# Создаёт короткий URL из URL, переданного в body
 
-| Флаг | Env            | По умолчанию           |
-|------|----------------|------------------------|
-| `-a` | `SERVER_ADDRESS` | `localhost:8080`     |
-| `-b` | `BASE_URL`       | `http://localhost:8080` |
-| `-l` | `LOG_LEVEL`      | `info`                 |
-| `-d` | `DATABASE_DSN`   | —                      |
+POST http://localhost:8080/api/shorten/batch
+# Создаёт несколько коротких URL за один запрос
 
-## Тесты
-
-```bash
-go test ./tests/...
+GET http://localhost:8080/{shortUrl}
+# Перенаправляет на заданный URL
 ```
 
-## Примеры
+## Алгоритм хэширования
+
+Для генерации уникального кода используется криптографически стойкий генератор случайных байтов `crypto/rand`.
+
+Генерируется 6 случайных байт, после чего они преобразуются в hexadecimal представление.
+
+В результате короткий URL содержит идентификатор длиной 12 символов.
+
+В PostgreSQL для `short_id` используется ограничение `UNIQUE`, предотвращающее сохранение одинаковых идентификаторов.
+
+## Установка и запуск
+
+Есть 2 варианта запуска: `local, dev`. Рассмотрим каждый из них.
+
+1. `local` Назначение: для дебага.
 
 ```bash
-# POST запрос (создать короткую ссылку)
-curl -X POST -d "https://example.com" http://localhost:8080
-# Ответ: http://localhost:8080/a1b2c3d4
+docker compose up -d postgres redis
 
-# GET запрос (перейти по ссылке)
-curl -v http://localhost:8080/a1b2c3d4
-# Редирект 307 на https://example.com
+# Ждём пока все запустится...
+# Отслеживать состояние можно по:
 
-# Health check
-curl http://localhost:8080/ping
-# OK
+docker compose ps
+
+# Запускаем App:
+
+go run ./cmd
+
+=> http://localhost:8080
+=> Profit!
+```
+
+2. `dev` Назначение: запуск приложения и всех зависимостей через Docker.
+
+```bash
+docker compose up --build
+
+# Ждём пока все запустится...
+# Отслеживать можно по логам:
+
+docker compose logs -f
+
+=> http://localhost:8080
+=> Profit!
 ```
 
 ## Команды Makefile
 
 ```bash
-make run    # запустить сервер
-make build  # собрать бинарник
-make test   # запустить тесты
+make run
+make build
+```

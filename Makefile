@@ -3,6 +3,3 @@ run:
 
 build:
 	go build -o url-shortener cmd/main.go
-
-test:
-	go test -v ./tests/...
